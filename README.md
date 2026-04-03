@@ -6,7 +6,7 @@ A comprehensive Streamlit dashboard for monitoring and analyzing Snowflake AI se
 
 1. Admin Cost-management on UI of Snowflake has big latency and does not pull from the same SNOWFLAKE.ACCOUNT_USAGE views, which prevent in-time response to overconsumption (there is no Resource-Monitoring applicable on AI consumption either, only Budget, with no ability to auto-suspend on consumption).
 
-2. Many ACCOUNT_USAGE views from Snowflake has evolved throughout recents changes without full backfill migration, so if you rely on some views alone without combining them, you will get wrong result.
+2. Many ACCOUNT_USAGE views from Snowflake have evolved throughout recent changes without full backfill migration, so if you rely on some views alone without combining them, you will get wrong results.
 
 Case in point:
 - `CORTEX_FUNCTIONS_QUERY_USAGE_HISTORY` and `CORTEX_FUNCTIONS_USAGE_HISTORY` are now deprecated, to be replaced by `CORTEX_AISQL_USAGE_HISTORY` [(per Snowflake doc)](https://docs.snowflake.com/en/sql-reference/account-usage/cortex_aisql_usage_history)
