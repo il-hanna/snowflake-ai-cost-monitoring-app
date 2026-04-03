@@ -110,7 +110,7 @@ group by all
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/your-username/snowflake-ai-cost-monitoring-app.git
+   git clone https://github.com/il-hanna/snowflake-ai-cost-monitoring-app.git
    cd snowflake-ai-cost-monitoring-app
    ```
 
