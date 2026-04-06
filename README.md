@@ -189,10 +189,6 @@ This configuration sets the sleep timeout for Snowflake Streamlit apps to 2 minu
 - **Data Freshness**: Account usage views may have latency; data is typically available within 45 minutes to 3 hours.
 - **Permissions**: Requires appropriate privileges to access ACCOUNT_USAGE schema views.
 
-## 📝 Version History
-
-- **Version 5.3**: DRY refactor with consolidated master CTEs and enhanced user ID tracking
-
 ## 🤝 Contributing
 
 Feel free to submit issues and enhancement requests!
