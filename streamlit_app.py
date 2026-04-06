@@ -35,34 +35,79 @@ tz_convert_pt    = f"convert_timezone('{timezone}', interval_start_time)::date"
 
 # 1. CORTEX FUNCTIONS MASTER (Consolidating the 3 legacy/current views)
 cortex_functions_master_cte = f"""
-cortex_func_raw as (
-    select usage_time as raw_ts, user_id, model_name, function_name, token_credits as credits, tokens 
+ai_sql as (
+    select 
+        usage_time,
+        query_id,
+        user_id,
+        case when len(model_name) = 0 or model_name is null then 'unknown' else model_name end as model_name,
+        case when len(function_name) = 0 or function_name is null then 'unknown' else function_name end as function_name,
+        token_credits as credits,
+        tokens
     from snowflake.account_usage.cortex_aisql_usage_history
     where {tz_convert_usage} between '{s}' and '{e}'
-    union all
-    select start_time as raw_ts, user_id, model_name, function_name, credits, 0 as tokens 
+
+),
+ai_func as (
+    select 
+        start_time,
+        query_id,
+        user_id,
+        case when len(model_name) = 0 or model_name is null then 'unknown' else model_name end as model_name,
+        case when len(function_name) = 0 or function_name is null then 'unknown' else function_name end as function_name,
+        credits,
+        0 as tokens
     from snowflake.account_usage.cortex_ai_functions_usage_history
     where {tz_convert_start} between '{s}' and '{e}'
-    union all
-    select start_time as raw_ts, null as user_id, model_name, function_name, token_credits as credits, tokens 
-    from snowflake.account_usage.cortex_functions_usage_history
+),
+cortex_func as (
+    select 
+        qh.start_time,
+        cf.query_id,
+        null as user_id, --qh has user_name only.
+        qh.user_name,
+        case when len(cf.model_name) = 0 or cf.model_name is null then 'unknown' else cf.model_name end as model_name,
+        case when len(cf.function_name) = 0 or cf.function_name is null then 'unknown' else cf.function_name end as function_name,
+        cf.token_credits as credits,
+        cf.tokens
+    from snowflake.account_usage.cortex_functions_query_usage_history cf
+    left join snowflake.account_usage.query_history qh
+        on cf.query_id = qh.query_id
     where {tz_convert_start} between '{s}' and '{e}'
+),
+all_combined_raw as (
+    select
+        coalesce(ai_sql.usage_time, ai_func.start_time, cortex_func.start_time) as start_time,
+        coalesce(ai_sql.user_id, ai_func.user_id, cortex_func.user_id) as user_id,
+        coalesce(ai_sql.query_id, ai_func.query_id, cortex_func.query_id) as query_id,
+        coalesce(ai_sql.model_name, ai_func.model_name, cortex_func.model_name) as model_name,
+        coalesce(ai_sql.function_name, ai_func.function_name, cortex_func.function_name) as function_name,
+        greatest_ignore_nulls(ai_sql.credits, ai_func.credits, cortex_func.credits,0) as credits,
+        greatest_ignore_nulls(ai_sql.tokens, ai_func.tokens, cortex_func.tokens,0) as tokens,
+    from ai_sql
+    full join ai_func 
+        on ai_sql.query_id = ai_func.query_id
+    full join cortex_func 
+        on ai_sql.query_id = cortex_func.query_id
+    
 ),
 cortex_functions_consolidated as (
     select 
-        convert_timezone('{timezone}', raw_ts)::date as start_date,
-        user_id,
-        model_name, 
-        function_name, 
-        sum(credits) as total_credits, 
-        sum(tokens) as total_tokens
-    from cortex_func_raw
+        date_trunc(day, r.start_time) as start_date,
+        r.user_id,
+        qh.user_name,
+        r.model_name, 
+        r.function_name, 
+        sum(r.credits) as total_credits, 
+        sum(r.tokens) as total_tokens
+    from all_combined_raw as r
+    left join snowflake.account_usage.query_history as qh
+        on r.query_id = qh.query_id
     group by all
 )
 """
 
 # 2. REST API MASTER (Applying custom pricing logic)
-# 2. REST API MASTER (Fixed Logic)
 rest_api_calc_cte = f"""
 raw_data_rest_api as (
     select model_name, tokens, start_time, user_id, request_id, 
@@ -166,7 +211,7 @@ cortex_agent_calc_cte = f"""
     """
 
 # DOCUMENT PROCESSING MASTER CTE
-
+# Snowflake seems to have decommissioned document_ai_usage_history view entirely, cannot query, not sure if backfill is complete.
 document_process_calc_cte = f"""
     select 
         null as user_id, 
@@ -362,7 +407,7 @@ select
     usage.service,
     sum(usage.total_credits) as credits
 from all_usage usage
---left join snowflake.account_usage.users u on usage.user_id = try_to_varchar(u.user_id)
+--left join snowflake.account_usage.users u on usage.user_id = try_to_varchar(u.user_id) --requires SECURITY_VIEWER role
 group by all
 order by 3 desc
 """
@@ -383,6 +428,6 @@ except Exception as ex:
 st.divider()
 
 
-st.info("Version 5.3 — DRY refactor and added userID | By: Cortex Code + Gemini + Grumpy human after correcting all the messy Snowflake Views | 2026-04-03")
+st.info("Version 5.4 — Revised Cortex Function CTE| 2026-04-06")
 
 st.balloons()
